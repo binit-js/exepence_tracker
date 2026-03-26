@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - EXPENCE TRACKER</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366F1;
+            --primary-dark: #4F46E5;
+            --secondary: #EC4899;
+            --text-main: #1F2937;
+            --text-muted: #6B7280;
+            --white: #ffffff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f172a;
+            position: relative;
+            overflow: hidden;
+            color: var(--text-main);
+        }
+
+        /* Animated Background */
+        .bg-blobs {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .blob {
+            position: absolute;
+            filter: blur(80px);
+            opacity: 0.6;
+            animation: float 10s infinite alternate ease-in-out;
+            will-change: transform;
+        }
+
+        .blob-1 {
+            top: -10%;
+            left: -10%;
+            width: 50vw;
+            height: 50vw;
+            background: var(--primary);
+            animation-delay: 0s;
+        }
+
+        .blob-2 {
+            bottom: -10%;
+            right: -10%;
+            width: 40vw;
+            height: 40vw;
+            background: var(--secondary);
+            animation-delay: -5s;
+        }
+
+        .blob-3 {
+            top: 40%;
+            left: 40%;
+            width: 30vw;
+            height: 30vw;
+            background: #8B5CF6;
+            animation-delay: -2s;
+            opacity: 0.4;
+        }
+
+        @keyframes float {
+            0% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            100% {
+                transform: translate(30px, 50px) scale(1.1);
+            }
+        }
+
+        /* Glass Card */
+        .auth-container {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 440px;
+            padding: 2rem;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            transition: transform 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 16px;
+            color: white;
+            font-size: 1.8rem;
+            margin: 0 auto 1.5rem;
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .header-text {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .header-text h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, var(--text-main), var(--primary));
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-text p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 1.25rem;
+            position: relative;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-left: 4px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            transition: 0.3s;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 16px 14px 44px;
+            border-radius: 14px;
+            border: 2px solid transparent;
+            background: rgba(255, 255, 255, 0.6);
+            font-family: inherit;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.02);
+        }
+
+        .form-input:focus {
+            background: white;
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+        }
+
+        .form-input:focus+.input-icon {
+            color: var(--primary);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            border-radius: 14px;
+            border: none;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.4);
+            margin-top: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 25px -5px rgba(79, 70, 229, 0.5);
+            filter: brightness(1.1);
+        }
+
+        .toggle-container {
+            margin-top: 1.5rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .toggle-btn {
+            color: var(--primary);
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .toggle-btn:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
+
+        .error-msg {
+            background: #FEF2F2;
+            color: #DC2626;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            border: 1px solid #FECACA;
+            display: none;
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 480px) {
+            .glass-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .blob {
+                opacity: 0.4;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="bg-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="auth-container">
+        <div class="glass-card">
+            <div class="brand-logo">
+                <i class="fa-solid fa-wallet"></i>
+            </div>
+
+            <div class="header-text">
+                <h1 id="form-title">Welcome Back</h1>
+                <p id="form-subtitle">We missed you! Please enter your details.</p>
+            </div>
+
+            <div class="error-msg" id="error-msg"></div>
+
+            <form id="auth-form">
+                <div class="form-group" id="username-group" style="display: none;">
+                    <label class="form-label">Username</label>
+                    <div class="input-wrapper">
+                        <input type="text" id="username" name="username" class="form-input" placeholder="johndoe">
+                        <i class="fa-solid fa-user input-icon"></i>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Email Address</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="email" name="email" class="form-input" required
+                            placeholder="you@company.com">
+                        <i class="fa-solid fa-envelope input-icon"></i>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="password" name="password" class="form-input" required
+                            placeholder="••••••••">
+                        <i class="fa-solid fa-lock input-icon"></i>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-submit" id="submit-btn">
+                    <span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+
+            <div class="toggle-container">
+                <span id="toggle-label">New to Budget Saathi?</span>
+                <a id="toggle-btn" class="toggle-btn">Create an account</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('auth-form');
+        const usernameGroup = document.getElementById('username-group');
+        const formTitle = document.getElementById('form-title');
+        const formSubtitle = document.getElementById('form-subtitle');
+        const submitBtn = document.getElementById('submit-btn');
+        const submitBtnText = submitBtn.querySelector('span');
+        const toggleBtn = document.getElementById('toggle-btn');
+        const toggleLabel = document.getElementById('toggle-label');
+        const errorMsg = document.getElementById('error-msg');
+
+        let isLogin = true;
+
+        toggleBtn.addEventListener('click', () => {
+            isLogin = !isLogin;
+            // Add subtle fade out/in effect
+            form.style.opacity = '0.5';
+            setTimeout(() => form.style.opacity = '1', 200);
+
+            if (isLogin) {
+                formTitle.innerText = 'Welcome Back';
+                formSubtitle.innerText = 'We missed you! Please enter your details.';
+                submitBtnText.innerText = 'Sign In';
+                toggleLabel.innerText = "New to Budget Saathi?";
+                toggleBtn.innerText = 'Create an account';
+                usernameGroup.style.display = 'none';
+                document.getElementById('username').removeAttribute('required');
+            } else {
+                formTitle.innerText = 'Create Account';
+                formSubtitle.innerText = 'Start your journey to better financial health.';
+                submitBtnText.innerText = 'Sign Up';
+                toggleLabel.innerText = 'Already have an account?';
+                toggleBtn.innerText = 'Sign In';
+                usernameGroup.style.display = 'block';
+                document.getElementById('username').setAttribute('required', 'true');
+            }
+            errorMsg.style.display = 'none';
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.style.display = 'none';
+            const originalText = submitBtnText.innerText;
+            submitBtnText.innerText = 'Processing...';
+            submitBtn.disabled = true;
+
+            const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await res.json();
+
+                if (res.ok) {
+                    window.location.href = '/';
+                } else {
+                    throw new Error(result.message || 'Something went wrong');
+                }
+            } catch (err) {
+                errorMsg.innerText = err.message;
+                errorMsg.style.display = 'block';
+                submitBtnText.innerText = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
