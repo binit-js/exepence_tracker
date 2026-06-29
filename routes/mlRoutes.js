@@ -297,38 +297,161 @@ router.get('/forecast', isAuthenticated, async (req, res) => {
     }
 });
 
+// Helper for JS-based chatbot fallback when FastAPI is offline
+async function queryRuleBasedAssistant(userId, question) {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    // 1. Fetch spent this month
+    const spentRes = await db.query(
+        "SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3",
+        [userId, currentMonth, currentYear]
+    );
+    const totalSpent = spentRes.rows && spentRes.rows[0].total ? parseFloat(spentRes.rows[0].total) : 0.0;
+
+    // 2. Fetch budget limit
+    const budgetRes = await db.query(
+        "SELECT amount FROM budgets WHERE user_id = $1 AND month = $2 AND year = $3",
+        [userId, currentMonth, currentYear]
+    );
+    const budgetLimit = budgetRes.rows && budgetRes.rows[0].amount ? parseFloat(budgetRes.rows[0].amount) : 0.0;
+
+    const questionLower = question.toLowerCase();
+
+    // Parse category specific questions
+    const categoriesList = ["food", "dining", "transport", "travel", "shopping", "entertainment", "bills", "utilities", "healthcare", "education"];
+    let matchedCat = null;
+    for (const cat of categoriesList) {
+        if (questionLower.includes(cat)) {
+            matchedCat = cat;
+            break;
+        }
+    }
+
+    if (questionLower.includes("most") || questionLower.includes("highest") || questionLower.includes("max")) {
+        const maxRes = await db.query(
+            `SELECT c.name, SUM(e.amount) as total 
+             FROM expenses e 
+             JOIN categories c ON e.category_id = c.id 
+             WHERE e.user_id = $1 
+             GROUP BY c.name ORDER BY total DESC LIMIT 1`,
+            [userId]
+        );
+        if (maxRes.rows && maxRes.rows.length > 0) {
+            return `You spent the most on **${maxRes.rows[0].name}** with a total of **₹${parseFloat(maxRes.rows[0].total).toFixed(2)}**.`;
+        }
+        return "I couldn't find any expenses logged yet. Add some transactions first!";
+    }
+    
+    if (questionLower.includes("will i exceed") || questionLower.includes("overrun") || questionLower.includes("budget limit") || questionLower.includes("risk")) {
+        if (budgetLimit === 0) {
+            return "You haven't set a budget limit for this month yet. Go to the Budgeting tab to set one!";
+        }
+        const remaining = budgetLimit - totalSpent;
+        const percentage = (totalSpent / budgetLimit) * 100;
+        if (percentage >= 100) {
+            return `Yes, you have already exceeded your budget of ₹${budgetLimit.toFixed(2)} by ₹${(-remaining).toFixed(2)}.`;
+        } else if (percentage >= 80) {
+            return `You are very close to exceeding your budget. You have spent ₹${totalSpent.toFixed(2)} out of ₹${budgetLimit.toFixed(2)} (${percentage.toFixed(1)}%), leaving you with only ₹${remaining.toFixed(2)}.`;
+        } else {
+            return `You are doing well! You have spent ₹${totalSpent.toFixed(2)} of your ₹${budgetLimit.toFixed(2)} budget (${percentage.toFixed(1)}%), leaving ₹${remaining.toFixed(2)} for the rest of the month.`;
+        }
+    }
+
+    if (matchedCat) {
+        const catRes = await db.query(
+            `SELECT SUM(e.amount) as total 
+             FROM expenses e 
+             JOIN categories c ON e.category_id = c.id 
+             WHERE e.user_id = $1 AND LOWER(c.name) LIKE $2`,
+            [userId, `%${matchedCat}%`]
+        );
+        const totalCat = catRes.rows && catRes.rows[0].total ? parseFloat(catRes.rows[0].total) : 0.0;
+        return `Your total spending on categories related to '${matchedCat}' is **₹${totalCat.toFixed(2)}**.`;
+    }
+
+    if (questionLower.includes("buy") || questionLower.includes("afford")) {
+        const numbers = questionLower.replace(/,/g, '').match(/\d+/g);
+        if (numbers && numbers.length > 0) {
+            const itemCost = parseFloat(numbers[0]);
+            const remaining = budgetLimit - totalSpent;
+            if (budgetLimit === 0) {
+                return `Since you haven't set a budget limit, it's hard to tell. However, you have spent ₹${totalSpent.toFixed(2)} this month.`;
+            }
+            if (itemCost <= remaining) {
+                return `Yes! You have ₹${remaining.toFixed(2)} remaining in your monthly budget, which is enough to buy this item for ₹${itemCost.toFixed(2)}.`;
+            } else {
+                const deficit = itemCost - remaining;
+                return `No, I would recommend against it. You only have ₹${remaining.toFixed(2)} remaining in your budget, which is ₹${deficit.toFixed(2)} short of the ₹${itemCost.toFixed(2)} cost.`;
+            }
+        }
+        return "Please specify the price of the item (e.g. 'Can I buy a laptop for ₹50,000?') so I can check your remaining budget.";
+    }
+
+    if (questionLower.includes("compare") || questionLower.includes("last month")) {
+        const lastMonth = currentMonth > 1 ? currentMonth - 1 : 12;
+        const lastYear = currentMonth > 1 ? currentYear : currentYear - 1;
+
+        const lastMonthRes = await db.query(
+            "SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3",
+            [userId, lastMonth, lastYear]
+        );
+        const lastSpent = lastMonthRes.rows && lastMonthRes.rows[0].total ? parseFloat(lastMonthRes.rows[0].total) : 0.0;
+        const diff = totalSpent - lastSpent;
+        if (lastSpent === 0) {
+            return `You spent ₹${totalSpent.toFixed(2)} this month. I don't have records of spending from last month to compare.`;
+        }
+        const pctChange = (diff / lastSpent) * 100;
+        if (diff > 0) {
+            return `You spent ₹${totalSpent.toFixed(2)} this month, which is **₹${diff.toFixed(2)} (+${pctChange.toFixed(1)}%) more** than last month (₹${lastSpent.toFixed(2)}).`;
+        } else {
+            return `You spent ₹${totalSpent.toFixed(2)} this month, which is **₹${(-diff).toFixed(2)} (${pctChange.toFixed(1)}%) less** than last month (₹${lastSpent.toFixed(2)}). Good job!`;
+        }
+    }
+
+    return `Hello! I am Budget Saathi AI. This month, you've spent ₹${totalSpent.toFixed(2)} out of your ₹${budgetLimit.toFixed(2)} budget. Let me know if you want to check your spending breakdown, compare months, or ask about purchasing items!`;
+}
+
 // 5. Chatbot Send Message
 router.post('/chat', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { message } = req.body;
+
+    if (!message) {
+        return res.status(400).json({ message: 'Message is required' });
+    }
+
     try {
-        const userId = req.session.userId;
-        const { message } = req.body;
-
-        if (!message) {
-            return res.status(400).json({ message: 'Message is required' });
-        }
-
         // Log user message first
         await db.query(
             'INSERT INTO chat_history (user_id, message, sender) VALUES ($1, $2, $3)',
             [userId, message, 'user']
         );
 
-        // Fetch response from FastAPI Assistant
-        const response = await fetch(`${ML_URL}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: message,
-                user_id: userId
-            })
-        });
+        let botResponse = '';
+        try {
+            // Fetch response from FastAPI Assistant
+            const response = await fetch(`${ML_URL}/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: message,
+                    user_id: userId
+                })
+            });
 
-        if (!response.ok) {
-            throw new Error('AI Assistant Service Error');
+            if (!response.ok) {
+                throw new Error('AI Assistant Service Error');
+            }
+
+            const data = await response.json();
+            botResponse = data.response;
+        } catch (fetchErr) {
+            console.warn('FastAPI assistant unreachable/failed, falling back to database rule assistant:', fetchErr.message);
+            // Self-healing database-backed fallback
+            botResponse = await queryRuleBasedAssistant(userId, message);
         }
-
-        const data = await response.json();
-        const botResponse = data.response;
 
         // Log bot response
         await db.query(
