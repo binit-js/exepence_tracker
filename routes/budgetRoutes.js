@@ -10,13 +10,13 @@ router.get('/', isAuthenticated, async (req, res) => {
         const month = now.getMonth() + 1;
         const year = now.getFullYear();
 
-        const [budgets] = await db.query(
-            'SELECT amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?',
+        const budgets = await db.query(
+            'SELECT amount FROM budgets WHERE user_id = $1 AND month = $2 AND year = $3',
             [req.session.userId, month, year]
         );
 
-        if (budgets.length > 0) {
-            res.json({ amount: budgets[0].amount });
+        if (budgets.rows.length > 0) {
+            res.json({ amount: budgets.rows[0].amount });
         } else {
             res.json({ amount: 0 }); // No budget set
         }
@@ -40,21 +40,21 @@ router.post('/', isAuthenticated, async (req, res) => {
         }
 
         // Check if exists
-        const [existing] = await db.query(
-            'SELECT id FROM budgets WHERE user_id = ? AND month = ? AND year = ?',
+        const existing = await db.query(
+            'SELECT id FROM budgets WHERE user_id = $1 AND month = $2 AND year = $3',
             [req.session.userId, month, year]
         );
 
-        if (existing.length > 0) {
+        if (existing.rows.length > 0) {
             // Update
             await db.query(
-                'UPDATE budgets SET amount = ? WHERE id = ?',
-                [amount, existing[0].id]
+                'UPDATE budgets SET amount = $1 WHERE id = $2',
+                [amount, existing.rows[0].id]
             );
         } else {
             // Insert
             await db.query(
-                'INSERT INTO budgets (user_id, amount, month, year) VALUES (?, ?, ?, ?)',
+                'INSERT INTO budgets (user_id, amount, month, year) VALUES ($1, $2, $3, $4)',
                 [req.session.userId, amount, month, year]
             );
         }

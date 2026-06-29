@@ -41,19 +41,19 @@ const uploadCsv = multer({
 router.get('/', isAuthenticated, async (req, res) => {
     try {
         const { category, month, year } = req.query;
-        let query = 'SELECT * FROM expenses WHERE user_id = ?';
+        let query = 'SELECT * FROM expenses WHERE user_id = $1';
         let params = [req.session.userId];
 
         if (category && category !== 'all') {
-            query += ' AND category_id = ?';
+            query += ' AND category_id = $2';
             params.push(category);
         }
 
         // Default list ordering
         query += ' ORDER BY date DESC';
 
-        const [expenses] = await db.query(query, params);
-        res.json(expenses);
+        const expenses = await db.query(query, params);
+        res.json(expenses.rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Server error' });
@@ -63,11 +63,11 @@ router.get('/', isAuthenticated, async (req, res) => {
 // Get Recent Expenses (Limit 5)
 router.get('/recent', isAuthenticated, async (req, res) => {
     try {
-        const [expenses] = await db.query(
-            'SELECT * FROM expenses WHERE user_id = ? ORDER BY date DESC LIMIT 5',
+        const expenses = await db.query(
+            'SELECT * FROM expenses WHERE user_id = $1 ORDER BY date DESC LIMIT 5',
             [req.session.userId]
         );
-        res.json(expenses);
+        res.json(expenses.rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Server error' });
@@ -83,35 +83,35 @@ router.get('/summary', isAuthenticated, async (req, res) => {
         const currentYear = now.getFullYear();
 
         // Total Spent this month
-        const [totalResult] = await db.query(
-            'SELECT SUM(amount) as total FROM expenses WHERE user_id = ? AND MONTH(date) = ? AND YEAR(date) = ?',
+        const totalResult = await db.query(
+            'SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
             [userId, currentMonth, currentYear]
         );
 
         // Category Breakdown
-        const [categoryResult] = await db.query(
+        const categoryResult = await db.query(
             `SELECT c.name, SUM(e.amount) as total 
              FROM expenses e 
              JOIN categories c ON e.category_id = c.id 
-             WHERE e.user_id = ? AND MONTH(e.date) = ? AND YEAR(e.date) = ? 
+             WHERE e.user_id = $1 AND EXTRACT(MONTH FROM e.date) = $2 AND EXTRACT(YEAR FROM e.date) = $3 
              GROUP BY c.name`,
             [userId, currentMonth, currentYear]
         );
 
         // Daily Trend
-        const [dailyResult] = await db.query(
-            `SELECT DATE(date) as day, SUM(amount) as total 
+        const dailyResult = await db.query(
+            `SELECT date::date as day, SUM(amount) as total 
              FROM expenses 
-             WHERE user_id = ? AND MONTH(date) = ? AND YEAR(date) = ? 
-             GROUP BY DATE(date) 
+             WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3 
+             GROUP BY date::date 
              ORDER BY day ASC`,
             [userId, currentMonth, currentYear]
         );
 
         res.json({
-            totalSpent: totalResult[0].total || 0,
-            categoryBreakdown: categoryResult,
-            dailyTrend: dailyResult
+            totalSpent: totalResult.rows[0].total || 0,
+            categoryBreakdown: categoryResult.rows,
+            dailyTrend: dailyResult.rows
         });
 
     } catch (err) {
@@ -131,7 +131,7 @@ router.post('/', isAuthenticated, upload.single('image'), async (req, res) => {
         }
 
         await db.query(
-            'INSERT INTO expenses (user_id, amount, description, category_id, date, payment_mode, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO expenses (user_id, amount, description, category_id, date, payment_mode, image_path) VALUES ($1, $2, $3, $4, $5, $6, $7)',
             [req.session.userId, amount, description, category, date, payment_mode, image_path]
         );
 
@@ -189,9 +189,9 @@ router.post('/import', isAuthenticated, (req, res, next) => {
         }
 
         // Fetch categories to map names to IDs
-        const [categories] = await db.query('SELECT * FROM categories');
+        const categories = await db.query('SELECT * FROM categories');
         const categoryMap = {};
-        categories.forEach(c => {
+        categories.rows.forEach(c => {
             categoryMap[c.name.toLowerCase()] = c.id;
         });
 
@@ -267,7 +267,7 @@ router.post('/import', isAuthenticated, (req, res, next) => {
         // Batch Insert
         for (const exp of insertedExpenses) {
             await db.query(
-                'INSERT INTO expenses (user_id, amount, description, category_id, date, payment_mode) VALUES (?, ?, ?, ?, ?, ?)',
+                'INSERT INTO expenses (user_id, amount, description, category_id, date, payment_mode) VALUES ($1, $2, $3, $4, $5, $6)',
                 exp
             );
         }
@@ -287,9 +287,9 @@ router.post('/import', isAuthenticated, (req, res, next) => {
 // Delete Expense
 router.delete('/:id', isAuthenticated, async (req, res) => {
     try {
-        const [result] = await db.query('DELETE FROM expenses WHERE id = ? AND user_id = ?', [req.params.id, req.session.userId]);
+        const result = await db.query('DELETE FROM expenses WHERE id = $1 AND user_id = $2', [req.params.id, req.session.userId]);
 
-        if (result.affectedRows === 0) {
+        if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Expense not found or unauthorized' });
         }
 

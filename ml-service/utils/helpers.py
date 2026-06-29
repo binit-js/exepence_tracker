@@ -14,17 +14,9 @@ load_dotenv(dotenv_path=env_path)
 def get_db_connection():
     """Establishes connection to the PostgreSQL database using parent .env parameters."""
     connection_string = os.getenv("SUPABASE_DB_URL") or os.getenv("DATABASE_URL")
-    if connection_string:
-        return psycopg2.connect(connection_string, cursor_factory=RealDictCursor)
-        
-    return psycopg2.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
-        port=os.getenv("DB_PORT", "5432"),
-        user=os.getenv("DB_USER", "postgres"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "postgres"),
-        cursor_factory=RealDictCursor
-    )
+    if not connection_string:
+        raise ValueError("SUPABASE_DB_URL is missing in environment variables")
+    return psycopg2.connect(connection_string, cursor_factory=RealDictCursor)
 
 def run_query(query, params=None):
     """Executes a query and returns results."""

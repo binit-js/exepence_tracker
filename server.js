@@ -1,7 +1,8 @@
 const express = require('express');
-const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
 
 require('dotenv').config();
 
@@ -16,15 +17,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'budget-saathi-secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: false,
-        maxAge: 1000 * 60 * 60 * 24
+app.use(cookieParser());
+
+// Custom stateless JWT session middleware
+app.use((req, res, next) => {
+    req.session = {}; // Mock session object for compatibility
+    const token = req.cookies.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || process.env.SESSION_SECRET || 'budget-saathi-secret');
+            req.session.userId = decoded.userId;
+            req.session.username = decoded.username;
+        } catch (err) {
+            // Token is invalid/expired, clear it
+            res.clearCookie('token');
+        }
     }
-}));
+    next();
+});
 
 // ================= ROUTES =================
 app.use('/api/auth', require('./routes/authRoutes'));

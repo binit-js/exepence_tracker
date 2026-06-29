@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 
 // Register
@@ -14,8 +15,8 @@ router.post('/register', async (req, res) => {
 
     try {
         // Check if user exists
-        const [existing] = await db.query('SELECT id FROM users WHERE email = ? OR username = ?', [email, username]);
-        if (existing.length > 0) {
+        const existing = await db.query('SELECT id FROM users WHERE email = $1 OR username = $2', [email, username]);
+        if (existing.rows.length > 0) {
             return res.status(409).json({ message: 'User already exists' });
         }
 
@@ -24,20 +25,32 @@ router.post('/register', async (req, res) => {
         const hash = await bcrypt.hash(password, salt);
 
         // Insert user
-        const [result] = await db.query(
-            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+        const result = await db.query(
+            'INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id',
             [username, email, hash]
         );
+        const insertedId = result.rows[0].id;
 
-        // Auto login
-        req.session.userId = result.insertId;
-        req.session.username = username;
+        // Generate JWT Token
+        const token = jwt.sign(
+            { userId: insertedId, username: username },
+            process.env.JWT_SECRET || process.env.SESSION_SECRET || 'budget-saathi-secret',
+            { expiresIn: '24h' }
+        );
 
-        res.status(201).json({ message: 'User registered successfully', userId: result.insertId });
+        // Set token cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
+
+        res.status(201).json({ message: 'User registered successfully', userId: insertedId });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Registration failed:', err);
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
@@ -50,40 +63,46 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        const users = await db.query('SELECT * FROM users WHERE email = $1', [email]);
 
-        if (users.length === 0) {
+        if (users.rows.length === 0) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        const user = users[0];
+        const user = users.rows[0];
         const isMatch = await bcrypt.compare(password, user.password_hash);
 
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Set session
-        req.session.userId = user.id;
-        req.session.username = user.username;
+        // Generate JWT Token
+        const token = jwt.sign(
+            { userId: user.id, username: user.username },
+            process.env.JWT_SECRET || process.env.SESSION_SECRET || 'budget-saathi-secret',
+            { expiresIn: '24h' }
+        );
+
+        // Set token cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
 
         res.json({ message: 'Login successful', user: { id: user.id, username: user.username, email: user.email } });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+        console.error('Login failed:', err);
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
 // Logout
 router.post('/logout', (req, res) => {
-    req.session.destroy(err => {
-        if (err) {
-            return res.status(500).json({ message: 'Could not log out' });
-        }
-        res.clearCookie('connect.sid');
-        res.json({ message: 'Logout successful' });
-    });
+    res.clearCookie('token');
+    res.json({ message: 'Logout successful' });
 });
 
 // Check Auth Status (for frontend init)

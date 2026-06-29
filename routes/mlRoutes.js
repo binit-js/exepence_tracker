@@ -70,28 +70,29 @@ router.get('/predict-budget-risk', isAuthenticated, async (req, res) => {
         const day = now.getDate();
 
         // Query current budget limit
-        const [budgets] = await db.query(
-            'SELECT amount FROM budgets WHERE user_id = ? AND month = ? AND year = ?',
+        const budgets = await db.query(
+            'SELECT amount FROM budgets WHERE user_id = $1 AND month = $2 AND year = $3',
             [userId, month, year]
         );
-        const limit = budgets.length > 0 ? parseFloat(budgets[0].amount) : 0.0;
+        const limit = budgets.rows.length > 0 ? parseFloat(budgets.rows[0].amount) : 0.0;
 
         // Query total spent
-        const [spentRes] = await db.query(
-            'SELECT SUM(amount) as total FROM expenses WHERE user_id = ? AND MONTH(date) = ? AND YEAR(date) = ?',
+        const spentRes = await db.query(
+            'SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
             [userId, month, year]
         );
-        const spent = spentRes[0].total ? parseFloat(spentRes[0].total) : 0.0;
+        const spent = spentRes.rows[0].total ? parseFloat(spentRes.rows[0].total) : 0.0;
 
         // Query category breakdown
-        const [breakdown] = await db.query(
+        const breakdown = await db.query(
             `SELECT c.name, SUM(e.amount) as total 
              FROM expenses e 
              JOIN categories c ON e.category_id = c.id 
-             WHERE e.user_id = ? AND MONTH(e.date) = ? AND YEAR(e.date) = ? 
+             WHERE e.user_id = $1 AND EXTRACT(MONTH FROM e.date) = $2 AND EXTRACT(YEAR FROM e.date) = $3 
              GROUP BY c.name`,
             [userId, month, year]
         );
+        const breakdownRows = breakdown.rows;
 
         try {
             // Forward to FastAPI with timeout
@@ -102,7 +103,7 @@ router.get('/predict-budget-risk', isAuthenticated, async (req, res) => {
                     budget_limit: limit,
                     total_spent: spent,
                     day_of_month: day,
-                    category_breakdown: breakdown.map(b => ({ name: b.name, total: parseFloat(b.total) }))
+                    category_breakdown: breakdownRows.map(b => ({ name: b.name, total: parseFloat(b.total) }))
                 })
             }, 2000);
 
@@ -133,8 +134,8 @@ router.get('/predict-budget-risk', isAuthenticated, async (req, res) => {
             const expectedOverspend = Math.max(0, projected - limit);
             
             let rec = "Keep tracking your daily expenses!";
-            if (risk !== "Low" && breakdown.length > 0) {
-                const sortedCats = [...breakdown].sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
+            if (risk !== "Low" && breakdownRows.length > 0) {
+                const sortedCats = [...breakdownRows].sort((a, b) => parseFloat(b.total) - parseFloat(a.total));
                 rec = `Reduce ${sortedCats[0].name} spending by 10% to stay within budget.`;
             } else if (risk !== "Low") {
                 rec = "Reduce restaurant & shopping spending by 10% to stay within budget.";
@@ -223,17 +224,18 @@ router.get('/forecast', isAuthenticated, async (req, res) => {
         const userId = req.session.userId;
         
         // Fetch last 6 months of history totals
-        const [results] = await db.query(
-            `SELECT YEAR(date) as year, MONTH(date) as month, SUM(amount) as total 
+        const results = await db.query(
+            `SELECT EXTRACT(YEAR FROM date) as year, EXTRACT(MONTH FROM date) as month, SUM(amount) as total 
              FROM expenses 
-             WHERE user_id = ? 
-             GROUP BY YEAR(date), MONTH(date) 
+             WHERE user_id = $1 
+             GROUP BY EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date) 
              ORDER BY year ASC, month ASC 
              LIMIT 6`,
             [userId]
         );
+        const resultsRows = results.rows;
 
-        const history = results.map(r => parseFloat(r.total));
+        const history = resultsRows.map(r => parseFloat(r.total));
         if (history.length === 0) {
             history.push(0.0);
         }
@@ -252,7 +254,7 @@ router.get('/forecast', isAuthenticated, async (req, res) => {
 
             const data = await response.json();
             return res.json({
-                history: results, // send raw array back too for frontend graphing
+                history: resultsRows, // send raw array back too for frontend graphing
                 forecast: data
             });
         } catch (fetchErr) {
@@ -279,7 +281,7 @@ router.get('/forecast', isAuthenticated, async (req, res) => {
             const growth = current > 0 ? ((fc - current) / current) * 100 : 0.0;
             
             return res.json({
-                history: results,
+                history: resultsRows,
                 forecast: {
                     current: parseFloat(current.toFixed(2)),
                     forecast: parseFloat(fc.toFixed(2)),
@@ -306,7 +308,7 @@ router.post('/chat', isAuthenticated, async (req, res) => {
 
         // Log user message first
         await db.query(
-            'INSERT INTO chat_history (user_id, message, sender) VALUES (?, ?, ?)',
+            'INSERT INTO chat_history (user_id, message, sender) VALUES ($1, $2, $3)',
             [userId, message, 'user']
         );
 
@@ -329,7 +331,7 @@ router.post('/chat', isAuthenticated, async (req, res) => {
 
         // Log bot response
         await db.query(
-            'INSERT INTO chat_history (user_id, message, sender) VALUES (?, ?, ?)',
+            'INSERT INTO chat_history (user_id, message, sender) VALUES ($1, $2, $3)',
             [userId, botResponse, 'bot']
         );
 
@@ -345,11 +347,11 @@ router.post('/chat', isAuthenticated, async (req, res) => {
 router.get('/chat/history', isAuthenticated, async (req, res) => {
     try {
         const userId = req.session.userId;
-        const [history] = await db.query(
-            'SELECT message, sender, created_at FROM chat_history WHERE user_id = ? ORDER BY created_at ASC',
+        const history = await db.query(
+            'SELECT message, sender, created_at FROM chat_history WHERE user_id = $1 ORDER BY created_at ASC',
             [userId]
         );
-        res.json(history);
+        res.json(history.rows);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error retrieving chat logs' });
