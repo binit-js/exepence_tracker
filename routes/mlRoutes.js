@@ -4,13 +4,14 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { Blob } = require('buffer');
+const os = require('os');
 const db = require('../config/db');
 const { isAuthenticated } = require('../middleware/auth');
 
 // Multer Config for temporary uploads before sending to Python OCR
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        cb(null, process.env.VERCEL ? os.tmpdir() : 'uploads/');
     },
     filename: (req, file, cb) => {
         cb(null, 'ocr_' + Date.now() + path.extname(file.originalname));
