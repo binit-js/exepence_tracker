@@ -1,38 +1,44 @@
-const mysql = require('mysql2/promise');
+const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
 async function setupDatabase() {
+    console.log('Reading supabase_schema.sql...');
+    let schema;
     try {
-        // Read the schema file
-        const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+        schema = fs.readFileSync(path.join(__dirname, 'supabase_schema.sql'), 'utf8');
+    } catch (e) {
+        console.error('❌ Failed to read supabase_schema.sql:', e.message);
+        return;
+    }
 
-        // Create a connection to the server (not the specific DB yet)
-        const connection = await mysql.createConnection({
-            host: process.env.DB_HOST || 'localhost',
-            user: process.env.DB_USER || 'root',
-            password: process.env.DB_PASSWORD,
-            multipleStatements: true // Important for running the whole script
-        });
+    const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+    if (!connectionString) {
+        console.error('❌ Error: SUPABASE_DB_URL or DATABASE_URL environment variable is missing in .env file!');
+        console.error('Please configure your database connection string and try again.');
+        return;
+    }
 
-        console.log('Connected to MySQL server...');
-
-        // Execute the schema script
-        await connection.query(schema);
-
-        console.log('✅ Database and tables created successfully!');
-        console.log('You can now run "npm start" to launch the application.');
-
-        await connection.end();
-
-    } catch (err) {
-        console.error('❌ Error creating database:', err.message);
-        if (err.code === 'ER_ACCESS_DENIED_ERROR') {
-            console.error('\n--> Please check your password in the .env file.');
-        } else if (err.code === 'ECONNREFUSED') {
-            console.error('\n--> Is your MySQL server running?');
+    const client = new Client({
+        connectionString: connectionString,
+        ssl: {
+            rejectUnauthorized: false
         }
+    });
+
+    try {
+        console.log('Connecting to PostgreSQL database (Supabase)...');
+        await client.connect();
+        console.log('Connected! Executing schema script...');
+        
+        await client.query(schema);
+        
+        console.log('✅ Supabase database schema loaded successfully!');
+    } catch (err) {
+        console.error('❌ Error executing database setup:', err.message);
+    } finally {
+        await client.end();
     }
 }
 

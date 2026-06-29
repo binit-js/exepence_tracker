@@ -17,11 +17,31 @@
 
 <body>
     <div class="app-container">
+        <!-- Mobile Navbar -->
+        <div class="mobile-navbar">
+            <button id="menu-toggle-btn" class="menu-toggle-btn">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="brand-mobile">
+                <i class="fa-solid fa-wallet"></i>
+                <h2>EXPENCE TRACKER</h2>
+            </div>
+            <button class="theme-toggle" id="theme-toggle-mobile"><i class="fa-solid fa-moon"></i></button>
+        </div>
+
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
         <!-- Sidebar Navigation -->
         <nav class="sidebar">
             <div class="brand">
-                <i class="fa-solid fa-wallet"></i>
-                <h2>EXPENCE TRACKER</h2>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <i class="fa-solid fa-wallet"></i>
+                    <h2>EXPENCE TRACKER</h2>
+                </div>
+                <button id="menu-close-btn" class="mobile-menu-close-btn">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
             <ul class="nav-links">
                 <li class="active" data-target="dashboard">
@@ -78,6 +98,22 @@
                         <h3>Monthly Limit</h3>
                         <h2 id="monthly-limit">₹0.00</h2>
                         <button class="btn btn-sm btn-outline" id="edit-budget-btn">Edit</button>
+                    </div>
+                    <div class="card ai-prediction-card">
+                        <div class="ai-badge"><i class="fa-solid fa-robot"></i> AI PREDICTION</div>
+                        <h3>AI Budget Prediction</h3>
+                        <h2 id="ai-risk-status">Calculating...</h2>
+                        <div class="ai-prediction-details">
+                            <div class="pred-item">
+                                <span>Confidence</span>
+                                <strong id="ai-confidence">-%</strong>
+                            </div>
+                            <div class="pred-item">
+                                <span>Expected Overspend</span>
+                                <strong id="ai-overspend">₹0.00</strong>
+                            </div>
+                        </div>
+                        <p id="ai-recommendation" class="ai-rec">Analyzing spending habits...</p>
                     </div>
                 </div>
 
@@ -140,16 +176,27 @@
                         <canvas id="trendChart"></canvas>
                     </div>
                 </div>
+
+
             </section>
 
             <!-- Settings Section -->
             <section id="settings" class="page-section">
                 <div class="card settings-card">
                     <h3>Preferences</h3>
-                    <div class="setting-item">
+                    <div class="setting-item" style="margin-bottom: 2rem;">
                         <p style="margin-bottom: 1rem; color: var(--text-muted);">Export your transaction data for
                             analysis.</p>
                         <button class="btn btn-secondary" id="export-data-btn">Download CSV</button>
+                    </div>
+                    <div class="setting-item" style="border-top: 1px solid var(--glass-border); padding-top: 1.5rem;">
+                        <p style="margin-bottom: 1rem; color: var(--text-muted);">Import expenses from a CSV file. Columns must match export: <strong>Date, Category, Description, Amount, Payment Mode</strong>.</p>
+                        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                            <div class="custom-file-upload" style="flex: 1; max-width: 300px; padding: 6px;">
+                                <input type="file" id="import-csv-file" accept=".csv">
+                            </div>
+                            <button class="btn btn-primary" id="import-data-btn"><i class="fa-solid fa-file-import"></i> Upload & Import</button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -183,6 +230,7 @@
                 <div class="form-group">
                     <label><i class="fa-solid fa-pen-to-square"></i> Description</label>
                     <input type="text" id="description" name="description" placeholder="E.g., Grocery shopping, Net">
+                    <span id="ai-category-confidence" class="ai-confidence-note" style="display: none; font-size: 0.8rem; margin-top: 4px; display: block; color: var(--primary);"></span>
                 </div>
 
                 <div class="form-group">
@@ -209,15 +257,29 @@
 
                 <div class="form-group">
                     <label><i class="fa-solid fa-image"></i> Receipt (Optional)</label>
-                    <div class="custom-file-upload">
-                        <input type="file" id="image" name="image" accept="image/*">
+                    <div class="file-upload-wrapper" style="display: flex; gap: 10px; align-items: center;">
+                        <div class="custom-file-upload" style="flex: 1;">
+                            <input type="file" id="image" name="image" accept="image/*">
+                        </div>
+                        <button type="button" id="scan-receipt-btn" class="btn btn-secondary btn-sm" style="white-space: nowrap; height: 42px;">
+                            <i class="fa-solid fa-expand"></i> Scan Receipt
+                        </button>
                     </div>
                 </div>
 
-                <div class="modal-footer">
+                <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
                     <button type="submit" class="btn btn-primary btn-block btn-lg">
                         Save Transaction
                     </button>
+                    <div style="text-align: center; margin-top: 10px; border-top: 1px dashed var(--glass-border); padding-top: 10px; width: 100%;">
+                        <span style="font-size: 0.85rem; color: var(--text-muted);">Or upload multiple via CSV:</span>
+                        <div style="margin-top: 8px;">
+                            <input type="file" id="modal-import-csv-file" accept=".csv" style="display: none;">
+                            <button type="button" id="modal-import-data-btn" class="btn btn-secondary btn-sm" style="width: 100%; height: 42px; justify-content: center;">
+                                <i class="fa-solid fa-file-import"></i> Import from CSV
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </form>
         </div>
@@ -236,6 +298,43 @@
                 <button type="submit" class="btn btn-primary btn-block">Set Budget</button>
             </form>
         </div>
+    </div>
+
+    <!-- Floating Chatbot Widget -->
+    <div class="chatbot-trigger" id="chatbot-trigger">
+        <i class="fa-solid fa-comment-dots"></i>
+    </div>
+
+    <div class="chatbot-container glass-premium" id="chatbot-container">
+        <div class="chatbot-header">
+            <div class="bot-info">
+                <div class="bot-avatar"><i class="fa-solid fa-robot"></i></div>
+                <div>
+                    <h4>Budget Saathi AI</h4>
+                    <p class="status"><span class="status-dot"></span> Online</p>
+                </div>
+            </div>
+            <button class="close-chat" id="close-chat"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        
+        <div class="chatbot-messages" id="chatbot-messages">
+            <!-- Messages populated by JS -->
+            <div class="chat-message bot">
+                Hi! I am Budget Saathi AI, your personal financial assistant. Ask me questions like "Where did I spend the most?" or "Will I exceed my budget?".
+            </div>
+        </div>
+
+        <div class="chatbot-suggestions" id="chatbot-suggestions">
+            <button type="button" class="suggestion-chip">Where did I spend the most?</button>
+            <button type="button" class="suggestion-chip">Will I exceed my budget?</button>
+            <button type="button" class="suggestion-chip">Compare with last month</button>
+            <button type="button" class="suggestion-chip">Can I buy a phone for ₹20,000?</button>
+        </div>
+
+        <form class="chatbot-input-area" id="chatbot-form">
+            <input type="text" id="chatbot-input" placeholder="Ask Budget Saathi AI..." required autocomplete="off">
+            <button type="submit" class="chat-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+        </form>
     </div>
 
     <!-- Chart.js -->

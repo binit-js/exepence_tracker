@@ -27,6 +27,16 @@ const upload = multer({
     }
 });
 
+const uploadCsv = multer({
+    storage: storage,
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+    fileFilter: (req, file, cb) => {
+        const extname = path.extname(file.originalname).toLowerCase() === '.csv';
+        if (extname) return cb(null, true);
+        cb(new Error('Only CSV files are allowed'));
+    }
+});
+
 // Get All Expenses (with optional filters)
 router.get('/', isAuthenticated, async (req, res) => {
     try {
@@ -129,6 +139,148 @@ router.post('/', isAuthenticated, upload.single('image'), async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// Import Expenses from CSV
+router.post('/import', isAuthenticated, (req, res, next) => {
+    uploadCsv.single('file')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ message: err.message });
+        }
+        next();
+    });
+}, async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded' });
+        }
+
+        const fs = require('fs');
+        let csvData = fs.readFileSync(req.file.path, 'utf8');
+        
+        // Delete the temporary file
+        fs.unlinkSync(req.file.path);
+
+        // Remove UTF-8 BOM if present (e.g. from Excel exports)
+        if (csvData.startsWith('\ufeff')) {
+            csvData = csvData.slice(1);
+        }
+
+        const lines = csvData.split(/\r?\n/).filter(line => line.trim() !== '');
+        if (lines.length < 2) {
+            return res.status(400).json({ message: 'CSV file is empty or missing data rows' });
+        }
+
+        // Dynamically detect delimiter (comma or semicolon)
+        const delimiter = lines[0].includes(';') ? ';' : ',';
+
+        // Parse Header Row
+        const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+        
+        const dateIdx = headers.indexOf('date');
+        const catIdx = headers.indexOf('category');
+        const descIdx = headers.indexOf('description');
+        const amountIdx = headers.indexOf('amount');
+        const payIdx = headers.indexOf('payment mode');
+
+        if (amountIdx === -1 || catIdx === -1 || dateIdx === -1) {
+            return res.status(400).json({ message: 'Missing columns: Date, Category, and Amount are mandatory' });
+        }
+
+        // Fetch categories to map names to IDs
+        const [categories] = await db.query('SELECT * FROM categories');
+        const categoryMap = {};
+        categories.forEach(c => {
+            categoryMap[c.name.toLowerCase()] = c.id;
+        });
+
+        const defaultCategoryId = categoryMap['other'] || 9; // Fallback to 'Other'
+        const insertedExpenses = [];
+        const errors = [];
+
+        // Parse Data Rows
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Robust character-by-character CSV splitter
+            const values = [];
+            let current = '';
+            let inQuotes = false;
+            for (let char of line) {
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === delimiter && !inQuotes) {
+                    values.push(current.trim().replace(/^["']|["']$/g, ''));
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            values.push(current.trim().replace(/^["']|["']$/g, ''));
+
+            if (values.length < headers.length) {
+                errors.push(`Row ${i + 1}: Columns count mismatch`);
+                continue;
+            }
+
+            const rawDate = values[dateIdx];
+            const rawCat = values[catIdx];
+            const rawDesc = values[descIdx] || '';
+            const rawAmount = values[amountIdx];
+            const rawPay = payIdx !== -1 ? values[payIdx] : 'Cash';
+
+            const amount = parseFloat(rawAmount);
+            if (isNaN(amount) || amount <= 0) {
+                errors.push(`Row ${i + 1}: Invalid amount "${rawAmount}"`);
+                continue;
+            }
+
+            // Parse Date
+            let date = new Date(rawDate);
+            if (isNaN(date.getTime())) {
+                const parts = rawDate.split('/');
+                if (parts.length === 3) {
+                    date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                }
+            }
+            if (isNaN(date.getTime())) {
+                date = new Date();
+            }
+
+            const categoryId = categoryMap[rawCat.toLowerCase()] || defaultCategoryId;
+
+            insertedExpenses.push([
+                req.session.userId,
+                amount,
+                rawDesc,
+                categoryId,
+                date,
+                rawPay
+            ]);
+        }
+
+        if (insertedExpenses.length === 0) {
+            return res.status(400).json({ message: 'No valid rows found to import', errors });
+        }
+
+        // Batch Insert
+        for (const exp of insertedExpenses) {
+            await db.query(
+                'INSERT INTO expenses (user_id, amount, description, category_id, date, payment_mode) VALUES (?, ?, ?, ?, ?, ?)',
+                exp
+            );
+        }
+
+        res.status(201).json({
+            message: `Successfully imported ${insertedExpenses.length} expenses.`,
+            insertedCount: insertedExpenses.length,
+            errors: errors.length > 0 ? errors : null
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error parsing CSV' });
     }
 });
 

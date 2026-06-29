@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+psycopg2-binary
+python-dotenv
+scikit-learn
+pandas
+numpy
+statsmodels
+easyocr
+pillow
+google-generativeai
+python-multipart
+
