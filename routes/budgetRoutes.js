@@ -9,17 +9,30 @@ router.get('/', isAuthenticated, async (req, res) => {
         const now = new Date();
         const month = now.getMonth() + 1;
         const year = now.getFullYear();
+        const userId = req.session.userId;
 
+        // 1. Fetch budget amount
         const budgets = await db.query(
             'SELECT amount FROM budgets WHERE user_id = $1 AND month = $2 AND year = $3',
-            [req.session.userId, month, year]
+            [userId, month, year]
         );
+        const monthlyBudget = budgets.rows.length > 0 ? parseFloat(budgets.rows[0].amount) : 0;
 
-        if (budgets.rows.length > 0) {
-            res.json({ amount: budgets.rows[0].amount });
-        } else {
-            res.json({ amount: 0 }); // No budget set
-        }
+        // 2. Fetch total spent directly from database using SUM aggregation
+        const totalResult = await db.query(
+            'SELECT COALESCE(SUM(amount), 0) AS total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
+            [userId, month, year]
+        );
+        const totalSpent = parseFloat(totalResult.rows[0].total);
+
+        // 3. Compute remaining budget
+        const remainingBudget = monthlyBudget - totalSpent;
+
+        res.json({
+            monthlyBudget,
+            totalSpent,
+            remainingBudget
+        });
 
     } catch (err) {
         console.error(err);

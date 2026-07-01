@@ -79,10 +79,10 @@ router.get('/predict-budget-risk', isAuthenticated, async (req, res) => {
 
         // Query total spent
         const spentRes = await db.query(
-            'SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
+            'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
             [userId, month, year]
         );
-        const spent = spentRes.rows[0].total ? parseFloat(spentRes.rows[0].total) : 0.0;
+        const spent = parseFloat(spentRes.rows[0].total);
 
         // Query category breakdown
         const breakdown = await db.query(
@@ -305,10 +305,10 @@ async function queryRuleBasedAssistant(userId, question) {
 
     // 1. Fetch spent this month
     const spentRes = await db.query(
-        "SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3",
+        "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3",
         [userId, currentMonth, currentYear]
     );
-    const totalSpent = spentRes.rows && spentRes.rows[0].total ? parseFloat(spentRes.rows[0].total) : 0.0;
+    const totalSpent = parseFloat(spentRes.rows[0].total);
 
     // 2. Fetch budget limit
     const budgetRes = await db.query(
@@ -394,10 +394,10 @@ async function queryRuleBasedAssistant(userId, question) {
         const lastYear = currentMonth > 1 ? currentYear : currentYear - 1;
 
         const lastMonthRes = await db.query(
-            "SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3",
             [userId, lastMonth, lastYear]
         );
-        const lastSpent = lastMonthRes.rows && lastMonthRes.rows[0].total ? parseFloat(lastMonthRes.rows[0].total) : 0.0;
+        const lastSpent = parseFloat(lastMonthRes.rows[0].total);
         const diff = totalSpent - lastSpent;
         if (lastSpent === 0) {
             return `You spent ₹${totalSpent.toFixed(2)} this month. I don't have records of spending from last month to compare.`;

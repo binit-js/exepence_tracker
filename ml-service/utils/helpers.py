@@ -51,10 +51,10 @@ def query_llm_financial_assistant(user_id, question):
     
     # Total spent this month
     spent_res = run_query(
-        "SELECT SUM(amount) as total FROM expenses WHERE user_id = %s AND EXTRACT(MONTH FROM date) = %s AND EXTRACT(YEAR FROM date) = %s",
+        "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = %s AND EXTRACT(MONTH FROM date) = %s AND EXTRACT(YEAR FROM date) = %s",
         (user_id, current_month, current_year)
     )
-    total_spent = float(spent_res[0]['total']) if spent_res and spent_res[0]['total'] else 0.0
+    total_spent = float(spent_res[0]['total']) if spent_res else 0.0
     
     # Budget limit
     budget_res = run_query(

@@ -508,31 +508,30 @@ async function loadCategories() {
 // Data Handling & Graphs
 async function loadDashboardData() {
     try {
-        const [budgetRes, expensesRes, summaryRes, predictionRes] = await Promise.all([
+        const [budgetRes, expensesRes, predictionRes] = await Promise.all([
             fetch('/api/budget'),
             fetch('/api/expenses/recent'),
-            fetch('/api/expenses/summary'),
             fetch('/api/ml/predict-budget-risk')
         ]);
 
         const budgetData = await budgetRes.json();
         const expensesData = await expensesRes.json();
-        const summary = await summaryRes.json();
         
         let predictionData = null;
         if (predictionRes.ok) {
             predictionData = await predictionRes.json();
         }
 
-        state.budget = budgetData.amount || 0;
-        const totalSpent = summary.totalSpent || 0;
+        state.budget = budgetData.monthlyBudget || 0;
+        const totalSpent = budgetData.totalSpent || 0;
+        const remainingBudget = budgetData.remainingBudget || 0;
 
-        updateDashboardUI(state.budget, totalSpent, expensesData);
+        updateDashboardUI(state.budget, totalSpent, remainingBudget, expensesData);
         if (predictionData) {
             updatePredictionUI(predictionData);
         }
         if (document.getElementById('expensesWithBudgetChart')) {
-            renderOverviewChart(state.budget, totalSpent);
+            renderOverviewChart(state.budget, totalSpent, remainingBudget);
         }
 
     } catch (error) {
@@ -540,13 +539,12 @@ async function loadDashboardData() {
     }
 }
 
-function updateDashboardUI(budget, totalSpent, recentTransactions) {
-    const remaining = budget - totalSpent;
+function updateDashboardUI(budget, totalSpent, remainingBudget, recentTransactions) {
     const percentage = budget > 0 ? (totalSpent / budget) * 100 : 0;
 
     if (document.getElementById('monthly-limit')) document.getElementById('monthly-limit').innerText = `₹${parseFloat(budget).toFixed(2)}`;
     if (document.getElementById('total-spent')) document.getElementById('total-spent').innerText = `₹${parseFloat(totalSpent).toFixed(2)}`;
-    if (document.getElementById('remaining-amount')) document.getElementById('remaining-amount').innerText = `₹${parseFloat(remaining).toFixed(2)}`;
+    if (document.getElementById('remaining-amount')) document.getElementById('remaining-amount').innerText = `₹${parseFloat(remainingBudget).toFixed(2)}`;
 
     const pb = document.getElementById('budget-progress');
     if (pb) {
@@ -555,10 +553,16 @@ function updateDashboardUI(budget, totalSpent, recentTransactions) {
 
         if (percentage < 80) {
             pb.style.background = 'var(--success)';
-            if (status) status.innerText = "You're doing great!";
+            if (status) {
+                status.innerText = "You're doing great!";
+                status.style.color = 'var(--success)';
+            }
         } else if (percentage < 100) {
             pb.style.background = 'var(--warning)';
-            if (status) status.innerText = "Careful, nearing limit.";
+            if (status) {
+                status.innerText = "Careful, nearing limit.";
+                status.style.color = 'var(--warning)';
+            }
         } else {
             pb.style.background = 'var(--danger)';
             if (status) {
@@ -678,13 +682,13 @@ async function loadAllExpenses() {
     });
 }
 
-function renderOverviewChart(budget, spent) {
+function renderOverviewChart(budget, spent, remainingBudget) {
     const ctx = document.getElementById('expensesWithBudgetChart');
     if (!ctx) return;
 
     if (expensesWithBudgetChart) expensesWithBudgetChart.destroy();
 
-    const remaining = Math.max(0, budget - spent);
+    const remaining = Math.max(0, remainingBudget);
 
     expensesWithBudgetChart = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',

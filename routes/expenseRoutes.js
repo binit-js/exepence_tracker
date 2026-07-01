@@ -85,7 +85,7 @@ router.get('/summary', isAuthenticated, async (req, res) => {
 
         // Total Spent this month
         const totalResult = await db.query(
-            'SELECT SUM(amount) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
+            'SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE user_id = $1 AND EXTRACT(MONTH FROM date) = $2 AND EXTRACT(YEAR FROM date) = $3',
             [userId, currentMonth, currentYear]
         );
 
@@ -110,7 +110,7 @@ router.get('/summary', isAuthenticated, async (req, res) => {
         );
 
         res.json({
-            totalSpent: totalResult.rows[0].total || 0,
+            totalSpent: parseFloat(totalResult.rows[0].total),
             categoryBreakdown: categoryResult.rows,
             dailyTrend: dailyResult.rows
         });
